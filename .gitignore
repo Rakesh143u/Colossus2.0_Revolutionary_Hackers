@@ -1,0 +1,69 @@
+# Learn more: https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+########################
+# Node.js Dependencies #
+########################
+node_modules/
+
+####################
+# Expo Directories #
+####################
+.expo/
+.expo-shared/
+dist/
+web-build/
+expo-env.d.ts
+
+########################
+# Native / Ejected RN  #
+########################
+android/
+ios/
+/*.jks
+*.p8
+*.p12
+*.mobileprovision
+*.orig.*
+
+# If you do partial commits for iOS/Android, you might want to exclude some folders,
+# but keep certain config files. For example:
+# !ios/Podfile
+# !ios/Podfile.lock
+# !android/gradlew
+# !android/gradlew.bat
+
+#################
+# Metro Bundler #
+#################
+.metro-health-check*
+
+#################
+# Debug/Logging #
+#################
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+#########
+# macOS  #
+#########
+.DS_Store
+*.pem
+
+###################
+# Local Env Files #
+###################
+.env
+.env*.local
+
+###################
+# TypeScript Info #
+###################
+*.tsbuildinfo
+
+################
+# Other Common  #
+################
+.vscode/
+coverage/
+*.log
