@@ -1,5 +1,6 @@
 // SignUpScreen.js
-import React, { useState } from 'react';
+
+import React, { useState } from "react";
 import {
   SafeAreaView,
   View,
@@ -11,36 +12,56 @@ import {
   Platform,
   Image,
   ActivityIndicator,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import Icon from 'react-native-vector-icons/FontAwesome';
+  Alert,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import Icon from "react-native-vector-icons/FontAwesome";
 
 const SignUpScreen = ({ navigation }) => {
-  const [name, setName] = useState('');
-  const [createEmail, setCreateEmail] = useState('');
-  const [createPassword, setCreatePassword] = useState('');
+  const [name, setName] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
     setIsLoading(true);
-    // Add your sign-up logic here. Once done, you can navigate:
-    setTimeout(() => {
+    try {
+      const response = await fetch("http://172.16.7.155:3000/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email: createEmail,
+          password: createPassword,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        Alert.alert("Success", data.message);
+        // After successful signup, navigate to Login so the user can log in.
+        navigation.navigate("Login");
+      } else {
+        Alert.alert("Error", data.error || "Something went wrong");
+      }
+    } catch (error) {
+      console.error("Signup error:", error);
+      Alert.alert("Error", "Could not connect to the server");
+    } finally {
       setIsLoading(false);
-      // For example, navigate to Home after successful sign-up
-      navigation.navigate('Home');
-    }, 1500);
+    }
   };
 
   return (
-    <LinearGradient colors={['#6A00FF', '#8E2DE2']} style={styles.container}>
+    <LinearGradient colors={["#6A00FF", "#8E2DE2"]} style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.keyboardAvoid}
         >
           <View style={styles.header}>
             <Image
-              source={require('../assets/shield.png')} // Make sure to have an asset at this path or replace accordingly
+              source={require("../assets/shield.png")}
               style={styles.logo}
             />
             <Text style={styles.title}>Sign Up</Text>
@@ -60,7 +81,12 @@ const SignUpScreen = ({ navigation }) => {
             </View>
 
             <View style={styles.inputContainer}>
-              <Icon name="envelope" size={20} color="#6A00FF" style={styles.icon} />
+              <Icon
+                name="envelope"
+                size={20}
+                color="#6A00FF"
+                style={styles.icon}
+              />
               <TextInput
                 style={styles.input}
                 placeholder="Create Email"
@@ -98,7 +124,7 @@ const SignUpScreen = ({ navigation }) => {
 
             <View style={styles.loginContainer}>
               <Text style={styles.loginText}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+              <TouchableOpacity onPress={() => navigation.navigate("Login")}>
                 <Text style={styles.loginLink}>Login</Text>
               </TouchableOpacity>
             </View>
@@ -110,90 +136,46 @@ const SignUpScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  keyboardAvoid: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  header: {
-    alignItems: 'center',
-    paddingBottom: 30,
-  },
-  logo: {
-    width: 80,
-    height: 80,
-    marginBottom: 15,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#fff',
-    opacity: 0.9,
-  },
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
+  keyboardAvoid: { flex: 1, justifyContent: "center" },
+  header: { alignItems: "center", paddingBottom: 30 },
+  logo: { width: 80, height: 80, marginBottom: 15 },
+  title: { fontSize: 32, fontWeight: "bold", color: "#fff", marginBottom: 5 },
+  subtitle: { fontSize: 16, color: "#fff", opacity: 0.9 },
   formContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     marginHorizontal: 20,
     borderRadius: 20,
     padding: 25,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F5F5F5",
     borderRadius: 10,
     marginBottom: 15,
     paddingHorizontal: 15,
   },
-  icon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    height: 50,
-    color: '#333',
-    fontSize: 16,
-  },
+  icon: { marginRight: 10 },
+  input: { flex: 1, height: 50, color: "#333", fontSize: 16 },
   signupButton: {
-    backgroundColor: '#6A00FF',
+    backgroundColor: "#6A00FF",
     borderRadius: 10,
     height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 20,
   },
-  signupButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  loginContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  loginText: {
-    color: '#666',
-    fontSize: 14,
-  },
-  loginLink: {
-    color: '#6A00FF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
+  signupButtonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  loginContainer: { flexDirection: "row", justifyContent: "center" },
+  loginText: { color: "#666", fontSize: 14 },
+  loginLink: { color: "#6A00FF", fontWeight: "bold", fontSize: 14 },
 });
 
 export default SignUpScreen;

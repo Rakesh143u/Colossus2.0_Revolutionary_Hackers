@@ -1,33 +1,69 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import Icon from 'react-native-vector-icons/FontAwesome';
+// LoginScreen.js
+
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
+  Image,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import Icon from "react-native-vector-icons/FontAwesome";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const LoginScreen = ({ navigation }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setIsLoading(true);
-    // Add your authentication logic here
-    setTimeout(() => {
+    try {
+      const response = await fetch("http://172.16.7.155:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        Alert.alert("Success", data.message);
+        // Store token, user id, and token expiry in AsyncStorage.
+        await AsyncStorage.multiSet([
+          ["token", data.token],
+          ["userId", data.user.id.toString()],
+          ["tokenExpiry", (Date.now() + 3600000).toString()], // 1 hour expiry
+        ]);
+        navigation.navigate("Home");
+      } else {
+        Alert.alert("Error", data.error || "Login failed");
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      Alert.alert("Error", "Could not connect to the server");
+    } finally {
       setIsLoading(false);
-      navigation.navigate('Home');
-    }, 1500);
+    }
   };
 
   return (
-    <LinearGradient colors={['#6A00FF', '#8E2DE2']} style={styles.container}>
+    <LinearGradient colors={["#6A00FF", "#8E2DE2"]} style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.keyboardAvoid}
         >
           <View style={styles.header}>
             <Image
-              source={require('../assets/shield.png')} // Add your app logo
+              source={require("../assets/shield.png")}
               style={styles.logo}
             />
             <Text style={styles.title}>SafeHer</Text>
@@ -36,7 +72,12 @@ const LoginScreen = ({ navigation }) => {
 
           <View style={styles.formContainer}>
             <View style={styles.inputContainer}>
-              <Icon name="envelope" size={20} color="#6A00FF" style={styles.icon} />
+              <Icon
+                name="envelope"
+                size={20}
+                color="#6A00FF"
+                style={styles.icon}
+              />
               <TextInput
                 style={styles.input}
                 placeholder="Email"
@@ -62,7 +103,11 @@ const LoginScreen = ({ navigation }) => {
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeIcon}
               >
-                <Icon name={showPassword ? 'eye-slash' : 'eye'} size={20} color="#666" />
+                <Icon
+                  name={showPassword ? "eye-slash" : "eye"}
+                  size={20}
+                  color="#666"
+                />
               </TouchableOpacity>
             </View>
 
@@ -99,7 +144,7 @@ const LoginScreen = ({ navigation }) => {
 
             <View style={styles.signupContainer}>
               <Text style={styles.signupText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('SignIn')}>
+              <TouchableOpacity onPress={() => navigation.navigate("SignUp")}>
                 <Text style={styles.signupLink}>Sign Up</Text>
               </TouchableOpacity>
             </View>
@@ -111,117 +156,57 @@ const LoginScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  keyboardAvoid: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  header: {
-    alignItems: 'center',
-    paddingBottom: 30,
-  },
-  logo: {
-    width: 80,
-    height: 80,
-    marginBottom: 15,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#fff',
-    opacity: 0.9,
-  },
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
+  keyboardAvoid: { flex: 1, justifyContent: "center" },
+  header: { alignItems: "center", paddingBottom: 30 },
+  logo: { width: 80, height: 80, marginBottom: 15 },
+  title: { fontSize: 32, fontWeight: "bold", color: "#fff", marginBottom: 5 },
+  subtitle: { fontSize: 16, color: "#fff", opacity: 0.9 },
   formContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     marginHorizontal: 20,
     borderRadius: 20,
     padding: 25,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F5F5F5",
     borderRadius: 10,
     marginBottom: 15,
     paddingHorizontal: 15,
   },
-  icon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    height: 50,
-    color: '#333',
-    fontSize: 16,
-  },
-  eyeIcon: {
-    padding: 10,
-  },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-    marginBottom: 20,
-  },
-  forgotPasswordText: {
-    color: '#6A00FF',
-    fontSize: 14,
-  },
+  icon: { marginRight: 10 },
+  input: { flex: 1, height: 50, color: "#333", fontSize: 16 },
+  eyeIcon: { padding: 10 },
+  forgotPassword: { alignSelf: "flex-end", marginBottom: 20 },
+  forgotPasswordText: { color: "#6A00FF", fontSize: 14 },
   loginButton: {
-    backgroundColor: '#6A00FF',
+    backgroundColor: "#6A00FF",
     borderRadius: 10,
     height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 20,
   },
-  loginButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  socialLoginContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  socialLoginText: {
-    color: '#666',
-    marginBottom: 15,
-  },
+  loginButtonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  socialLoginContainer: { alignItems: "center", marginBottom: 20 },
+  socialLoginText: { color: "#666", marginBottom: 15 },
   socialButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '60%',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "60%",
   },
-  socialButton: {
-    backgroundColor: '#F5F5F5',
-    padding: 15,
-    borderRadius: 50,
-  },
-  signupContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  signupText: {
-    color: '#666',
-  },
-  signupLink: {
-    color: '#6A00FF',
-    fontWeight: 'bold',
-  },
+  socialButton: { backgroundColor: "#F5F5F5", padding: 15, borderRadius: 50 },
+  signupContainer: { flexDirection: "row", justifyContent: "center" },
+  signupText: { color: "#666" },
+  signupLink: { color: "#6A00FF", fontWeight: "bold" },
 });
 
 export default LoginScreen;
