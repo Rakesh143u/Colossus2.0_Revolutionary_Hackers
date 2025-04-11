@@ -10,6 +10,7 @@ import ProfileScreen from "./screens/profilescreen";
 import ChatListScreen from "./screens/ChatListScreen";
 import ChatScreen from "./screens/ChatScreen";
 import EmergencyAlert from "./screens/EmergencyAlert"; // Updated import
+import ChatbotScreen from "./screens/ChatbotScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -27,6 +28,8 @@ export default function App() {
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="ChatList" component={ChatListScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
+        <Stack.Screen name="ChatbotScreen" component={ChatbotScreen} />
+
         {/* Registered the EmergencyAlert screen */}
         <Stack.Screen name="EmergencyAlert" component={EmergencyAlert} />
       </Stack.Navigator>
