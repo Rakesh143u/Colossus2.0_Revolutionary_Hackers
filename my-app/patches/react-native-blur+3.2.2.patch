@@ -1,0 +1,12 @@
+diff --git a/node_modules/react-native-blur/android/build.gradle b/node_modules/react-native-blur/android/build.gradle
+index 5fbca77..27fb511 100644
+--- a/node_modules/react-native-blur/android/build.gradle
++++ b/node_modules/react-native-blur/android/build.gradle
+@@ -33,5 +33,6 @@ repositories {
+ }
+ 
+ dependencies {
+-    compile 'com.facebook.react:react-native:[0.32,)'
++    implementation 'com.facebook.react:react-native:[0.32,)'
++
+ }

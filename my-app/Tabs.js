@@ -1,11 +1,25 @@
 // Tabs.js
-import React from "react";
+import React, { useEffect } from "react";
+import { useNavigation } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import HomeScreen from "./screens/homescreen";
 import ContactsScreen from "./screens/contactsscreen";
 import LocationScreen from "./screens/LocationScreen";
 import SettingsScreen from "./screens/SettingsScreen";
 import Icon from "react-native-vector-icons/FontAwesome";
+
+// This dummy component instantly redirects to EmergencyAlert
+const AlertRedirectScreen = () => {
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    // As soon as the tab is selected, navigate to EmergencyAlert
+    navigation.navigate("EmergencyAlert");
+  }, [navigation]);
+
+  // Return nothing so it doesn't flash any UI
+  return null;
+};
 
 const Tab = createBottomTabNavigator();
 
@@ -42,6 +56,16 @@ export default function Tabs() {
         options={{
           tabBarIcon: ({ color, size }) => (
             <Icon name="map-marker" size={size} color={color} />
+          ),
+        }}
+      />
+      {/* Use the AlertRedirectScreen to trigger emergency */}
+      <Tab.Screen
+        name="Alert"
+        component={AlertRedirectScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="exclamation-triangle" size={size} color={color} />
           ),
         }}
       />

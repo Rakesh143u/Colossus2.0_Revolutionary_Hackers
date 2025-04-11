@@ -67,9 +67,12 @@ const ContactsScreen = ({ navigation }) => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
-      const response = await fetch("http://172.16.7.155:3000/api/emergency", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetch(
+        "http://192.168.163.124:3000/api/emergency",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       const result = await response.json();
       setEmergencyContacts(result);
     } catch (error) {
@@ -82,7 +85,7 @@ const ContactsScreen = ({ navigation }) => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
-      await fetch("http://172.16.7.155:3000/api/emergency", {
+      await fetch("http://192.168.163.124:3000/api/emergency", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

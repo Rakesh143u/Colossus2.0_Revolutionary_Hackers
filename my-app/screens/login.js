@@ -1,3 +1,4 @@
+// screens/LoginScreen.js
 import React, { useState } from "react";
 import {
   View,
@@ -8,7 +9,6 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
-  Image,
   ActivityIndicator,
   Alert,
   ScrollView,
@@ -27,11 +27,14 @@ const LoginScreen = ({ navigation }) => {
   const handleLogin = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("http://172.16.7.155:3000/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+      const response = await fetch(
+        "http://192.168.163.124:3000/api/auth/login",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        }
+      );
 
       const data = await response.json();
       if (response.ok) {
@@ -192,21 +195,9 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
   keyboardAvoid: { flex: 1 },
-  scrollView: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingVertical: 20,
-  },
-  header: {
-    alignItems: "center",
-    paddingBottom: 30,
-  },
-  logo: {
-    width: 120,
-    height: 120,
-    marginBottom: 15,
-    tintColor: "#fff",
-  },
+  scrollView: { flexGrow: 1, justifyContent: "center", paddingVertical: 20 },
+  header: { alignItems: "center", paddingBottom: 30 },
+  logo: { width: 120, height: 120, marginBottom: 15, tintColor: "#fff" },
   title: {
     fontSize: 34,
     fontWeight: "bold",
@@ -217,12 +208,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 5,
     letterSpacing: 1,
   },
-  subtitle: {
-    fontSize: 16,
-    color: "#fff",
-    opacity: 0.9,
-    letterSpacing: 0.5,
-  },
+  subtitle: { fontSize: 16, color: "#fff", opacity: 0.9, letterSpacing: 0.5 },
   formContainer: {
     backgroundColor: "rgba(255, 255, 255, 0.95)",
     marginHorizontal: 20,
@@ -246,22 +232,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(106, 0, 255, 0.1)",
   },
-  icon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    color: "#333",
-    fontSize: 16,
-    height: "100%",
-  },
-  eyeIcon: {
-    padding: 10,
-  },
-  forgotPassword: {
-    alignSelf: "flex-end",
-    marginVertical: 10,
-  },
+  icon: { marginRight: 10 },
+  input: { flex: 1, color: "#333", fontSize: 16, height: "100%" },
+  eyeIcon: { padding: 10 },
+  forgotPassword: { alignSelf: "flex-end", marginVertical: 10 },
   forgotPasswordText: {
     color: "#6A00FF",
     fontSize: 14,
@@ -278,10 +252,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 5,
   },
-  gradientButton: {
-    paddingVertical: 18,
-    alignItems: "center",
-  },
+  gradientButton: { paddingVertical: 18, alignItems: "center" },
   loginButtonText: {
     color: "#fff",
     fontSize: 18,
@@ -293,10 +264,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 15,
   },
-  signupText: {
-    color: "#666",
-    fontSize: 14,
-  },
+  signupText: { color: "#666", fontSize: 14 },
   signupLink: {
     color: "#6A00FF",
     fontWeight: "bold",

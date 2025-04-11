@@ -1,11 +1,12 @@
 // server.js
-
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import pkg from "pg";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import http from "http";
+import { Server } from "socket.io";
 
 dotenv.config();
 
@@ -22,11 +23,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-/**
- * Middleware: authenticateUser
- * Extracts the JWT token from the Authorization header,
- * verifies it, and attaches the userId to req.userId.
- */
+// Authentication middleware that verifies the JWT
 const authenticateUser = (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
@@ -42,22 +39,15 @@ const authenticateUser = (req, res, next) => {
   }
 };
 
-// -------------------- Root Endpoint --------------------
+// Root endpoint
 app.get("/", (req, res) => {
   res.json({ message: "Welcome to Suraksha-Bhandhu Backend API!" });
 });
 
-// -------------------- Auth Routes --------------------
-
-/**
- * POST /api/auth/signup
- * Registers a new user.
- */
+// Authentication routes
 app.post("/api/auth/signup", async (req, res) => {
   try {
     const { name, email, password } = req.body;
-
-    // Check if user exists
     const existingUser = await pool.query(
       "SELECT * FROM users WHERE email = $1",
       [email]
@@ -67,19 +57,14 @@ app.post("/api/auth/signup", async (req, res) => {
         .status(400)
         .json({ error: "User already exists with that email." });
     }
-
-    // Hash the password
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // Insert new user
     const newUser = await pool.query(
       `INSERT INTO users (name, email, password)
        VALUES ($1, $2, $3)
        RETURNING id, name, email`,
       [name, email, hashedPassword]
     );
-
     res.status(201).json({
       message: "User registered successfully!",
       user: newUser.rows[0],
@@ -90,15 +75,9 @@ app.post("/api/auth/signup", async (req, res) => {
   }
 });
 
-/**
- * POST /api/auth/login
- * Logs in a user and returns a JWT token.
- */
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    // Fetch user by email
     const userResult = await pool.query(
       "SELECT * FROM users WHERE email = $1",
       [email]
@@ -106,22 +85,16 @@ app.post("/api/auth/login", async (req, res) => {
     if (userResult.rows.length === 0) {
       return res.status(400).json({ error: "Invalid email or password." });
     }
-
     const user = userResult.rows[0];
-
-    // Compare password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ error: "Invalid email or password." });
     }
-
-    // Sign JWT including userId inside the token payload
     const token = jwt.sign(
       { userId: user.id, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: "1h" }
     );
-
     res.json({
       message: "Login successful",
       user: { id: user.id, name: user.name, email: user.email },
@@ -133,65 +106,108 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// -------------------- Emergency Contacts Routes --------------------
-
-/**
- * POST /api/emergency
- * Toggles an emergency contact for the authenticated user.
- */
-app.post("/api/emergency", authenticateUser, async (req, res) => {
-  const userId = req.userId;
-  const { contact_id, contact_name, contact_number } = req.body;
-
-  try {
-    // Check if the contact exists as an emergency contact for this user.
-    const existing = await pool.query(
-      "SELECT * FROM emergency_contacts WHERE user_id = $1 AND contact_id = $2",
-      [userId, contact_id]
-    );
-
-    if (existing.rows.length > 0) {
-      // Remove if it exists
-      await pool.query(
-        "DELETE FROM emergency_contacts WHERE user_id = $1 AND contact_id = $2",
-        [userId, contact_id]
-      );
-      return res.json({ message: "Removed from emergency contacts." });
-    } else {
-      // Otherwise, add as emergency contact.
-      await pool.query(
-        `INSERT INTO emergency_contacts (user_id, contact_id, contact_name, contact_number)
-         VALUES ($1, $2, $3, $4)`,
-        [userId, contact_id, contact_name, contact_number]
-      );
-      return res.json({ message: "Added to emergency contacts." });
-    }
-  } catch (error) {
-    console.error("Emergency contact toggle error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-/**
- * GET /api/emergency
- * Retrieves all emergency contacts for the authenticated user.
- */
+// Emergency contacts route – now fetching user-specific contacts from the database.
+// Make sure an "emergency_contacts" table exists with fields: contact_id, user_id, contact_name, etc.
 app.get("/api/emergency", authenticateUser, async (req, res) => {
-  const userId = req.userId;
   try {
     const result = await pool.query(
-      "SELECT contact_id, contact_name, contact_number FROM emergency_contacts WHERE user_id = $1",
-      [userId]
+      `SELECT contact_id, contact_name FROM emergency_contacts WHERE user_id = $1`,
+      [req.userId]
     );
-    res.json(result.rows);
+    // If no contacts are found, you may choose to return an empty list or fallback to a default dummy list.
+    res.json(result.rows.length > 0 ? result.rows : []);
   } catch (error) {
-    console.error("Fetching emergency contacts error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("Error fetching emergency contacts:", error);
+    res.status(500).json({ error: "Internal server error." });
   }
 });
 
-// -------------------- Start Server --------------------
+// Set up Socket.IO for chat functionality
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: "*", methods: ["GET", "POST"] },
+});
+
+io.on("connection", (socket) => {
+  console.log("A user connected:", socket.id);
+
+  socket.on("authenticate", (userData) => {
+    socket.userId = userData.userId;
+    console.log(`Socket ${socket.id} authenticated as user ${socket.userId}`);
+  });
+
+  socket.on("joinRoom", (room) => {
+    socket.join(room);
+    console.log(`Socket ${socket.id} joined room ${room}`);
+  });
+
+  socket.on("chatMessage", async (data) => {
+    console.log(
+      `Message from ${socket.id} in room ${data.room}: ${data.message}`
+    );
+    try {
+      await pool.query(
+        `INSERT INTO messages (sender_id, room, message, latitude, longitude)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          data.senderId,
+          data.room,
+          data.message,
+          data.latitude || null,
+          data.longitude || null,
+        ]
+      );
+    } catch (err) {
+      console.error("Error saving message:", err);
+    }
+    io.to(data.room).emit("chatMessage", {
+      sender: data.senderId,
+      message: data.message,
+      latitude: data.latitude,
+      longitude: data.longitude,
+    });
+  });
+
+  // When a socket disconnects, delete all messages sent by that user.
+  socket.on("disconnect", async () => {
+    console.log("User disconnected:", socket.id);
+    if (socket.userId) {
+      try {
+        await pool.query("DELETE FROM messages WHERE sender_id = $1", [
+          socket.userId,
+        ]);
+        console.log(`Deleted messages for user ${socket.userId}`);
+      } catch (err) {
+        console.error("Error deleting messages on disconnect:", err);
+      }
+    }
+  });
+});
+
+server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
+
+/*
+  PostgreSQL Table Creation:
+
+  -- Create table for messages
+  CREATE TABLE messages (
+    id SERIAL PRIMARY KEY,
+    sender_id INTEGER NOT NULL,
+    room VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
+  -- Example table for emergency_contacts (if not already in place):
+  CREATE TABLE emergency_contacts (
+    contact_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,  -- Link to the user's id in the users table
+    contact_name VARCHAR(255) NOT NULL,
+    contact_phone VARCHAR(50)
+  );
+*/

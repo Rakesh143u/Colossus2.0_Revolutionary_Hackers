@@ -27,15 +27,18 @@ const SignUpScreen = ({ navigation }) => {
   const handleSignUp = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("http://172.16.7.155:3000/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          email: createEmail,
-          password: createPassword,
-        }),
-      });
+      const response = await fetch(
+        "http://192.168.163.124:3000/api/auth/signup",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            email: createEmail,
+            password: createPassword,
+          }),
+        }
+      );
 
       const data = await response.json();
       if (response.ok) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TextInput, Alert, TouchableOpacity, Linking } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 
@@ -49,16 +49,24 @@ const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
 };
 
 const LocationScreen = () => {
-  const [location, setLocation] = useState(null); // User's current location.
-  const [destination, setDestination] = useState(null); // Selected destination.
-  const [routeCoordinates, setRouteCoordinates] = useState([]); // Polyline coordinates for the driving route.
-  const [region, setRegion] = useState(null); // Map region.
+  const [location, setLocation] = useState(null);             // User's current location.
+  const [destination, setDestination] = useState(null);       // Destination coordinate.
+  const [routeCoordinates, setRouteCoordinates] = useState([]); // Driving route polyline.
+  const [region, setRegion] = useState(null);                   // Map region.
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  
-  const mapRef = useRef(null);
+  const [safePlaces, setSafePlaces] = useState([]);             // Array of nearby safe places.
 
-  // Obtain the current device location on mount.
+  // For demonstration, assume these are your emergency contacts:
+  const [emergencyContacts] = useState([
+    { id: 1, name: 'John Doe', phone: '+1234567890' },
+    { id: 2, name: 'Jane Smith', phone: '+1987654321' }
+  ]);
+
+  const mapRef = useRef(null);
+  const GOOGLE_API_KEY = "AIzaSyCc2Oa-tvEn_57DthaLy92bLWoGeGF49sE"; // Replace with your valid API key.
+
+  // Obtain current device location on mount.
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -68,7 +76,6 @@ const LocationScreen = () => {
       }
       let currentLocation = await Location.getCurrentPositionAsync({});
       setLocation(currentLocation.coords);
-      // Set the initial region.
       setRegion({
         latitude: currentLocation.coords.latitude,
         longitude: currentLocation.coords.longitude,
@@ -79,22 +86,20 @@ const LocationScreen = () => {
     })();
   }, []);
 
-  // Fetch a driving route from the origin (current location) to the destination using the Google Directions API.
+  // Fetch a driving route from origin to destination using Google Directions API.
   const fetchRoute = async (origin, dest) => {
     try {
-      // Reset previous route
-      setRouteCoordinates([]);
+      setRouteCoordinates([]); // Reset previous route.
       const originStr = `${origin.latitude},${origin.longitude}`;
-      const destinationStr =` ${dest.latitude},${dest.longitude}`;
-      const apiKey = "AIzaSyC7aFNoQf5cPA7Xbc7wEgn3DvB7mqEw1n4"; // Replace with your API key.
-      const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${originStr}&destination=${destinationStr}&key=${apiKey}&mode=driving`;
+      const destinationStr = `${dest.latitude},${dest.longitude}`;
+      const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${originStr}&destination=${destinationStr}&key=${GOOGLE_API_KEY}&mode=driving`;
       const response = await fetch(url);
       const json = await response.json();
 
       console.log('Directions API response:', json);
 
       if (json.status !== 'OK' || !json.routes.length) {
-        Alert.alert('No route found',` Could not find a route. (Status: ${json.status})`);
+        Alert.alert('No route found', `Could not find a route. (Status: ${json.status})`);
         return;
       }
 
@@ -107,38 +112,138 @@ const LocationScreen = () => {
     }
   };
 
-  // Handle search submission: geocode the query, update destination, animate map, and fetch route.
-  const handleSearch = async () => {
-    if (!query) return;
+  // Fetch nearby safe places using Google Places API.
+  // Prioritized: police stations and hospitals first, then shopping malls.
+  const fetchSafePlaces = async () => {
+    if (!location) return;
     try {
-      const results = await Location.geocodeAsync(query);
-      if (results && results.length > 0) {
-        const { latitude, longitude } = results[0];
-        const destCoords = { latitude, longitude };
-        setDestination(destCoords);
-        // Update map region.
-        setRegion({
-          ...destCoords,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
-        if (mapRef.current) {
-          mapRef.current.animateToRegion({
+      const radius = 5000; // search within 5km radius (adjust as needed)
+      const baseUrl = ` https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location.latitude},${location.longitude}&radius=${radius}&key=${GOOGLE_API_KEY}`;
+      let combinedResults = [];
+      // Priority order: police, hospital, then shopping mall.
+      const types = ["police", "hospital", "shopping_mall"];
+      
+      for (let type of types) {
+        const url = `${baseUrl}&type=${type}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.results) {
+          // Maintain order by concatenating results sequentially.
+          combinedResults = combinedResults.concat(data.results);
+        }
+      }
+      setSafePlaces(combinedResults);
+    } catch (error) {
+      Alert.alert('Error fetching safe places', 'Something went wrong while fetching safe places.');
+      console.error(error);
+    }
+  };
+
+  // Handle search submission: either geocode for a specific destination or fetch safe places.
+  const handleSearch = async () => {
+    const lowerQuery = query.toLowerCase().trim();
+    if (!query) return;
+
+    if (lowerQuery.includes('safe')) {
+      // If the query relates to safe places, fetch nearby safe places.
+      setDestination(null); // Clear any single destination.
+      setRouteCoordinates([]);
+      await fetchSafePlaces();
+      // Optionally, update map region or animate to show markers.
+      if (mapRef.current && location) {
+        mapRef.current.animateToRegion({
+          latitude: location.latitude,
+          longitude: location.longitude,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        }, 1000);
+      }
+    } else {
+      // Normal search: geocode the query to get a destination.
+      try {
+        const results = await Location.geocodeAsync(query);
+        if (results && results.length > 0) {
+          const { latitude, longitude } = results[0];
+          const destCoords = { latitude, longitude };
+          setDestination(destCoords);
+          setSafePlaces([]); // Clear safe places markers.
+          setRegion({
             ...destCoords,
             latitudeDelta: 0.01,
             longitudeDelta: 0.01,
-          }, 1000);
+          });
+          if (mapRef.current) {
+            mapRef.current.animateToRegion({
+              ...destCoords,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }, 1000);
+          }
+          if (location) {
+            fetchRoute(location, destCoords);
+          }
+        } else {
+          Alert.alert('Location not found', 'Please try another search term.');
         }
-        if (location) {
-          fetchRoute(location, destCoords);
-        }
-      } else {
-        Alert.alert('Location not found', 'Please try another search term.');
+      } catch (error) {
+        Alert.alert('Error', 'Something went wrong with the search.');
+        console.error(error);
       }
-    } catch (error) {
-      Alert.alert('Error', 'Something went wrong with the search.');
-      console.error(error);
     }
+  };
+
+  // Handle tap on map to set destination and fetch driving route.
+  const handleMapPress = (event) => {
+    const tappedCoordinate = event.nativeEvent.coordinate;
+    setDestination(tappedCoordinate);
+    setSafePlaces([]); // Clear any safe places markers.
+    setRegion({
+      ...tappedCoordinate,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    });
+    if (mapRef.current) {
+      mapRef.current.animateToRegion({
+        ...tappedCoordinate,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      }, 1000);
+    }
+    if (location) {
+      fetchRoute(location, tappedCoordinate);
+    }
+  };
+
+  // Open the external maps application with navigation directions.
+  const handleNavigate = () => {
+    if (!location || !destination) return;
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${location.latitude},${location.longitude}&destination=${destination.latitude},${destination.longitude}&travelmode=driving`;
+    Linking.openURL(url).catch(err =>
+      Alert.alert('Error', 'Could not open the navigation application.')
+    );
+  };
+
+  // New: In-app live location sharing to emergency contacts.
+  // In a real implementation, you might send these messages via an API or display them in an in-app chat.
+  // For this demo, we'll simulate sending the location and then show an alert.
+  const handleShareLiveLocationInApp = () => {
+    if (!location) {
+      Alert.alert('Location Unavailable', 'Could not retrieve your current location.');
+      return;
+    }
+    
+    // Construct a location message using a Google Maps link.
+    const liveLocationURL =` https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`;
+    
+    // Simulate sending this message to each emergency contact.
+    emergencyContacts.forEach(contact => {
+      console.log(`Sending live location to ${contact.name} (${contact.phone}): ${liveLocationURL}`);
+      // Replace the above console.log with your actual in-app message delivery logic,
+      // such as making an API call to your backend service.
+    });
+    
+    // After sending, show an alert indicating successful sharing.
+    Alert.alert('Live Location Shared',` Your live location has been shared with: ${emergencyContacts.map(c => c.name).join(', ')}`);
   };
 
   // Compute straight-line distance for display.
@@ -168,7 +273,7 @@ const LocationScreen = () => {
       <View style={styles.searchBarContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search location..."
+          placeholder="Search location or safe places..."
           value={query}
           onChangeText={setQuery}
           returnKeyType="search"
@@ -180,6 +285,7 @@ const LocationScreen = () => {
         style={styles.map}
         region={region}
         showsUserLocation={true}
+        onPress={handleMapPress}  // Handle map tap
       >
         {/* Destination marker */}
         {destination && (
@@ -189,6 +295,19 @@ const LocationScreen = () => {
             pinColor="red"
           />
         )}
+        {/* Safe places markers */}
+        {safePlaces.map((place, index) => (
+          <Marker
+            key={index}
+            coordinate={{
+              latitude: place.geometry.location.lat,
+              longitude: place.geometry.location.lng,
+            }}
+            title={place.name}
+            description={place.vicinity}
+            pinColor="green"
+          />
+        ))}
         {/* Draw the route polyline along actual roads */}
         {routeCoordinates.length > 0 && (
           <Polyline
@@ -198,10 +317,21 @@ const LocationScreen = () => {
           />
         )}
       </MapView>
-      {/* Info overlay showing distance */}
+      
+      {/* Info overlay showing distance, navigation, and live location sharing */}
       <View style={styles.infoContainer}>
         {destination && (
-          <Text style={styles.distanceText}>{distanceText}</Text>
+          <>
+            <Text style={styles.distanceText}>{distanceText}</Text>
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity onPress={handleNavigate} style={styles.button}>
+                <Text style={styles.buttonText}>Navigate</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleShareLiveLocationInApp} style={styles.button}>
+                <Text style={styles.buttonText}>Share Live Location</Text>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
       </View>
     </View>
@@ -254,6 +384,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+    marginBottom: 5,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  button: {
+    backgroundColor: '#6A00FF',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    marginHorizontal: 5,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 14,
   },
 });
 
