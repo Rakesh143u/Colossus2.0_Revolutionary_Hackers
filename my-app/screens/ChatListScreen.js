@@ -27,11 +27,14 @@ const ChatListScreen = ({ navigation }) => {
         return;
       }
 
-      const response = await fetch("http://192.168.163.124:3000/api/emergency", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(
+        "http://192.168.163.124:3000/api/emergency",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       if (!response.ok) throw new Error("Failed to fetch contacts");
 

@@ -1,22 +1,56 @@
 // screens/ChatScreen.js
-import React, { useState, useRef } from "react";
-import { 
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView, 
-  TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, 
-  ScrollView, Alert, Linking 
+import React, { useState, useRef, useEffect } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  ScrollView,
+  Alert,
+  Linking,
 } from "react-native";
 import Icon from "react-native-vector-icons/FontAwesome";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const ChatScreen = ({ route, navigation }) => {
-  const { contact } = route.params; // Contact passed from ChatListScreen
+  const { contact } = route.params;
   const [messages, setMessages] = useState([]);
   const [chatText, setChatText] = useState("");
   const [locationLoading, setLocationLoading] = useState(false);
   const scrollViewRef = useRef(null);
 
+  // Load persisted messages when component mounts
+  useEffect(() => {
+    const loadMessages = async () => {
+      try {
+        const storedMessages = await AsyncStorage.getItem("messages");
+        if (storedMessages) {
+          setMessages(JSON.parse(storedMessages));
+        }
+      } catch (error) {
+        console.error("Failed to load messages:", error);
+      }
+    };
+    loadMessages();
+  }, []);
+
+  // Persist messages to AsyncStorage
+  const persistMessages = async (updatedMessages) => {
+    try {
+      await AsyncStorage.setItem("messages", JSON.stringify(updatedMessages));
+    } catch (error) {
+      console.error("Failed to save messages:", error);
+    }
+  };
+
   // Send a text message
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!chatText.trim()) return;
 
     const newMessage = {
@@ -26,7 +60,13 @@ const ChatScreen = ({ route, navigation }) => {
       timestamp: new Date().toLocaleTimeString(),
     };
 
-    setMessages((prevMessages) => [...prevMessages, newMessage]);
+    const updatedMessages = [...messages, newMessage];
+    setMessages(updatedMessages);
+    persistMessages(updatedMessages);
+
+    // Optionally, send the message to your backend API:
+    // await sendMessageToBackend({ contact_id: contact.contact_id, type: newMessage.type, content: newMessage.content });
+
     setChatText("");
   };
 
@@ -58,7 +98,12 @@ const ChatScreen = ({ route, navigation }) => {
         timestamp: new Date().toLocaleTimeString(),
       };
 
-      setMessages((prevMessages) => [...prevMessages, newMessage]);
+      const updatedMessages = [...messages, newMessage];
+      setMessages(updatedMessages);
+      persistMessages(updatedMessages);
+
+      // Optionally, send to backend API
+      // await sendMessageToBackend({ contact_id: contact.contact_id, type: newMessage.type, content: newMessage.content });
     } catch (error) {
       Alert.alert("Error", "Unable to fetch your current location.");
       console.error(error);
@@ -68,7 +113,7 @@ const ChatScreen = ({ route, navigation }) => {
   };
 
   // Send an alert message
-  const handleSendAlert = () => {
+  const handleSendAlert = async () => {
     const alertMessage = {
       id: Date.now().toString(),
       type: "alert",
@@ -76,8 +121,31 @@ const ChatScreen = ({ route, navigation }) => {
       timestamp: new Date().toLocaleTimeString(),
     };
 
-    setMessages((prevMessages) => [...prevMessages, alertMessage]);
+    const updatedMessages = [...messages, alertMessage];
+    setMessages(updatedMessages);
+    persistMessages(updatedMessages);
+
+    // Optionally, send alert message to backend API
+    // await sendMessageToBackend({ contact_id: contact.contact_id, type: alertMessage.type, content: alertMessage.content });
   };
+
+  // Optional: Function to send a message to your backend (requires proper API endpoint implementation)
+  // const sendMessageToBackend = async (payload) => {
+  //   try {
+  //     const token = await AsyncStorage.getItem("token");
+  //     if (!token) return;
+  //     await fetch("http://your-backend-url/api/messages", {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         Authorization: `Bearer ${token}`,
+  //       },
+  //       body: JSON.stringify(payload),
+  //     });
+  //   } catch (error) {
+  //     console.error("Failed to send message to backend:", error);
+  //   }
+  // };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -87,15 +155,17 @@ const ChatScreen = ({ route, navigation }) => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{contact.name}</Text>
       </View>
-      
-      <KeyboardAvoidingView 
-        style={styles.container} 
+
+      <KeyboardAvoidingView
+        style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <ScrollView 
+        <ScrollView
           style={styles.messagesContainer}
           ref={scrollViewRef}
-          onContentSizeChange={() => scrollViewRef.current.scrollToEnd({ animated: true })}
+          onContentSizeChange={() =>
+            scrollViewRef.current.scrollToEnd({ animated: true })
+          }
         >
           {messages.map((msg) => (
             <View key={msg.id} style={styles.messageBubble}>
@@ -107,9 +177,13 @@ const ChatScreen = ({ route, navigation }) => {
                   : "Message"}
               </Text>
               {msg.type === "location" ? (
-                <Text 
+                <Text
                   style={[styles.messageText, { color: "#007BFF" }]}
-                  onPress={() => Linking.openURL(msg.content).catch((err) => console.error(err))}
+                  onPress={() =>
+                    Linking.openURL(msg.content).catch((err) =>
+                      console.error(err)
+                    )
+                  }
                 >
                   {msg.content}
                 </Text>
@@ -119,7 +193,9 @@ const ChatScreen = ({ route, navigation }) => {
               <Text style={styles.timestamp}>{msg.timestamp}</Text>
             </View>
           ))}
-          {locationLoading && <ActivityIndicator size="large" color="#6A00FF" />}
+          {locationLoading && (
+            <ActivityIndicator size="large" color="#6A00FF" />
+          )}
         </ScrollView>
         <View style={styles.inputRow}>
           <TextInput
@@ -130,15 +206,24 @@ const ChatScreen = ({ route, navigation }) => {
             onChangeText={setChatText}
             multiline
           />
-          <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={handleSendMessage}
+          >
             <Text style={styles.sendButtonText}>Send</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleShareLiveLocation}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleShareLiveLocation}
+          >
             <Text style={styles.actionButtonText}>Share Location</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={handleSendAlert}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleSendAlert}
+          >
             <Text style={styles.actionButtonText}>Send Alert</Text>
           </TouchableOpacity>
         </View>
