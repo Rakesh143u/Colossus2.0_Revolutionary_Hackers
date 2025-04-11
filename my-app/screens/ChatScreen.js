@@ -1,179 +1,358 @@
 // screens/ChatScreen.js
-import React, { useEffect, useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
-  FlatList,
+  SafeAreaView,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  ScrollView,
   Alert,
+  Linking,
 } from "react-native";
-import io from "socket.io-client";
-import * as Location from "expo-location";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/FontAwesome";
+import * as Location from "expo-location";
+import { io } from "socket.io-client";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const SOCKET_SERVER_URL = "http://192.168.163.124:3000";
-
-const ChatScreen = ({ route }) => {
-  const { contact } = route.params; // emergency contact details
+const ChatScreen = ({ route, navigation }) => {
+  const { contact } = route.params;
   const [messages, setMessages] = useState([]);
-  const [text, setText] = useState("");
-  const [room, setRoom] = useState(null);
-  const [userId, setUserId] = useState("");
-  const socketRef = useRef();
+  const [chatText, setChatText] = useState("");
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [socket, setSocket] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const scrollViewRef = useRef(null);
 
   useEffect(() => {
-    // Get current user id from AsyncStorage
-    const loadUserId = async () => {
+    const initializeSocket = async () => {
+      const token = await AsyncStorage.getItem("token");
       const id = await AsyncStorage.getItem("userId");
       setUserId(id);
+
+      const newSocket = io("http://192.168.163.124:3000", {
+        auth: { token },
+      });
+
+      newSocket.on("connect", () => {
+        console.log("Connected to socket");
+        const room = getRoomId(id, contact.contact_id);
+        newSocket.emit("joinRoom", room);
+      });
+
+      newSocket.on("chatMessage", (message) => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            ...message,
+            id: message.id.toString(),
+            timestamp: new Date(message.created_at).toLocaleTimeString(),
+          },
+        ]);
+      });
+
+      newSocket.on("error", (error) => {
+        Alert.alert("Connection Error", error);
+      });
+
+      setSocket(newSocket);
+      loadPreviousMessages(id, contact.contact_id);
+
+      return () => {
+        newSocket.disconnect();
+      };
     };
-    loadUserId();
 
-    socketRef.current = io(SOCKET_SERVER_URL);
-
-    (async () => {
-      const storedUserId = await AsyncStorage.getItem("userId");
-      socketRef.current.emit("authenticate", { userId: storedUserId });
-      // Create a unique room name e.g. "chat_<userId>_<contactId>"
-      const roomName = `chat_${storedUserId}_${contact.contact_id}`;
-      setRoom(roomName);
-      socketRef.current.emit("joinRoom", roomName);
-    })();
-
-    // Listen for incoming messages
-    socketRef.current.on("chatMessage", (data) => {
-      setMessages((prev) => [...prev, data]);
-    });
-
-    // Disconnect socket when leaving the screen
-    return () => {
-      socketRef.current.disconnect();
-    };
+    initializeSocket();
   }, [contact]);
 
-  // Function to send a message or distress message with location
-  const sendMessage = async (isDistress = false) => {
+  const getRoomId = (userId, contactId) => {
+    return [userId, contactId]
+      .map(Number)
+      .sort((a, b) => a - b)
+      .join("_");
+  };
+
+  const loadPreviousMessages = async (userId, contactId) => {
     try {
-      const senderId = await AsyncStorage.getItem("userId");
-      let locationData = {};
+      const token = await AsyncStorage.getItem("token");
+      const response = await fetch(
+        `http://192.168.163.124:3000/api/messages?contactId=${contactId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-      if (isDistress) {
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          Alert.alert("Permission denied", "Location permission is required.");
-          return;
-        }
-        const location = await Location.getCurrentPositionAsync({});
-        locationData = {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        };
+      if (response.ok) {
+        const data = await response.json();
+        setMessages(
+          data.map((msg) => ({
+            ...msg,
+            id: msg.id.toString(),
+            timestamp: new Date(msg.created_at).toLocaleTimeString(),
+          }))
+        );
       }
+    } catch (error) {
+      console.error("Error loading messages:", error);
+    }
+  };
 
-      const messageData = {
-        room,
-        senderId,
-        message: isDistress ? "DISTRESS" : text,
-        ...locationData,
+  const sendMessage = async (messageData) => {
+    try {
+      const room = getRoomId(userId, contact.contact_id);
+      const message = {
+        ...messageData,
+        timestamp: new Date().toISOString(),
       };
 
-      // Emit the message via socket
-      socketRef.current.emit("chatMessage", messageData);
-      // Optimistically update local state
-      setMessages((prev) => [...prev, { ...messageData, sender: senderId }]);
-      setText("");
+      socket.emit("chatMessage", {
+        room,
+        message: {
+          ...message,
+          type: messageData.type || "text",
+          content: messageData.content,
+        },
+      });
     } catch (error) {
       console.error("Error sending message:", error);
     }
   };
 
-  // Render each message with optional location information
-  const renderMessage = ({ item }) => (
-    <View style={styles.messageBubble}>
-      <Text style={styles.messageText}>
-        {item.sender === userId ? "Me" : contact.contact_name} : {item.message}
-      </Text>
-      {item.latitude && item.longitude && (
-        <Text style={styles.locationText}>
-          Location: {Number(item.latitude).toFixed(4)},{" "}
-          {Number(item.longitude).toFixed(4)}
-        </Text>
-      )}
-    </View>
-  );
+  const requestLocationPermission = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Denied", "Unable to access your location.");
+      return false;
+    }
+    return true;
+  };
+
+  const handleSendMessage = () => {
+    if (!chatText.trim()) return;
+
+    const newMessage = {
+      type: "text",
+      content: chatText,
+    };
+
+    sendMessage(newMessage);
+    setChatText("");
+  };
+
+  const handleShareLiveLocation = async () => {
+    const hasPermission = await requestLocationPermission();
+    if (!hasPermission) return;
+
+    try {
+      setLocationLoading(true);
+      const currentLocation = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = currentLocation.coords;
+      const liveLocationURL = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+
+      const newMessage = {
+        type: "location",
+        content: liveLocationURL,
+      };
+
+      sendMessage(newMessage);
+    } catch (error) {
+      Alert.alert("Error", "Unable to fetch your current location.");
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  const handleSendAlert = () => {
+    const alertMessage = {
+      type: "alert",
+      content: "ALERT: I am in danger. Please help me!",
+    };
+
+    sendMessage(alertMessage);
+  };
 
   return (
-    <LinearGradient colors={["#6A00FF", "#8E2DE2"]} style={styles.container}>
-      <FlatList
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={(item, index) => index.toString()}
-        style={styles.messagesContainer}
-      />
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          value={text}
-          placeholder="Type your message..."
-          placeholderTextColor="#666"
-          onChangeText={setText}
-        />
-        <TouchableOpacity
-          style={styles.sendButton}
-          onPress={() => sendMessage(false)}
-        >
-          <Icon name="send" size={20} color="#fff" />
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Icon name="arrow-left" size={24} color="#fff" />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>{contact.contact_name}</Text>
       </View>
-      <TouchableOpacity
-        style={styles.distressButton}
-        onPress={() => sendMessage(true)}
+
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <Text style={styles.distressText}>
-          Send Distress Message with Location
-        </Text>
-      </TouchableOpacity>
-    </LinearGradient>
+        <ScrollView
+          style={styles.messagesContainer}
+          ref={scrollViewRef}
+          onContentSizeChange={() =>
+            scrollViewRef.current?.scrollToEnd({ animated: true })
+          }
+        >
+          {messages.map((msg) => (
+            <View key={msg.id} style={styles.messageBubble}>
+              <Text style={styles.messageType}>
+                {msg.type === "alert"
+                  ? "Alert"
+                  : msg.type === "location"
+                  ? "Location"
+                  : "Message"}
+              </Text>
+              {msg.type === "location" ? (
+                <Text
+                  style={[styles.messageText, { color: "#007BFF" }]}
+                  onPress={() =>
+                    Linking.openURL(msg.content).catch((err) =>
+                      console.error(err)
+                    )
+                  }
+                >
+                  {msg.content}
+                </Text>
+              ) : (
+                <Text style={styles.messageText}>{msg.content}</Text>
+              )}
+              <Text style={styles.timestamp}>{msg.timestamp}</Text>
+            </View>
+          ))}
+          {locationLoading && (
+            <ActivityIndicator size="large" color="#6A00FF" />
+          )}
+        </ScrollView>
+
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.chatInput}
+            placeholder="Type your message..."
+            placeholderTextColor="#666"
+            value={chatText}
+            onChangeText={setChatText}
+            multiline
+          />
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={handleSendMessage}
+          >
+            <Text style={styles.sendButtonText}>Send</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.actionsRow}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleShareLiveLocation}
+          >
+            <Text style={styles.actionButtonText}>Share Location</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleSendAlert}
+          >
+            <Text style={styles.actionButtonText}>Send Alert</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 40 },
-  messagesContainer: { flex: 1, marginBottom: 10 },
-  messageBubble: {
-    backgroundColor: "#fff",
-    padding: 10,
-    borderRadius: 10,
-    marginVertical: 5,
-  },
-  messageText: { fontSize: 16, color: "#333" },
-  locationText: { fontSize: 12, color: "#555" },
-  inputContainer: {
+  safeArea: { flex: 1, backgroundColor: "#000" },
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 25,
+    backgroundColor: "#6A00FF",
     paddingHorizontal: 15,
+    paddingVertical: 10,
+  },
+  headerTitle: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginLeft: 15,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
+    padding: 10,
+  },
+  messagesContainer: {
+    flex: 1,
     marginBottom: 10,
   },
-  input: { flex: 1, fontSize: 16, paddingVertical: 10 },
+  messageBubble: {
+    backgroundColor: "#EAEAEA",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  messageType: {
+    fontSize: 12,
+    color: "#555",
+    marginBottom: 3,
+  },
+  messageText: {
+    fontSize: 16,
+    color: "#333",
+  },
+  timestamp: {
+    fontSize: 10,
+    color: "#999",
+    textAlign: "right",
+    marginTop: 5,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: "#ccc",
+    paddingVertical: 8,
+  },
+  chatInput: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    fontSize: 16,
+    marginRight: 10,
+    maxHeight: 80,
+    color: "#333",
+  },
   sendButton: {
     backgroundColor: "#6A00FF",
-    padding: 10,
-    borderRadius: 25,
-    marginLeft: 10,
-  },
-  distressButton: {
-    backgroundColor: "#FF6F61",
-    padding: 15,
     borderRadius: 10,
-    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 15,
   },
-  distressText: { color: "#fff", fontWeight: "bold" },
+  sendButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  actionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginVertical: 10,
+  },
+  actionButton: {
+    backgroundColor: "#FF4081",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flex: 1,
+    alignItems: "center",
+    marginHorizontal: 5,
+  },
+  actionButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
 });
 
 export default ChatScreen;

@@ -18,7 +18,7 @@
         "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to detect nearby emergency devices (ESP32).",
         "NSLocationWhenInUseUsageDescription": "This app uses your location to send emergency alerts."
       },
-  
+
       "config": {
         "googleMapsApiKey": "AIzaSyCc2Oa-tvEn_57DthaLy92bLWoGeGF49sE"
       }
@@ -37,7 +37,6 @@
       ],
       "package": "com.abhijit_111.myapp",
 
-     
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyCc2Oa-tvEn_57DthaLy92bLWoGeGF49sE"
@@ -47,10 +46,8 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    
-    "plugins": [
-      "react-native-ble-plx" 
-    ],
+
+    "plugins": ["react-native-ble-plx"],
     "extra": {
       "eas": {
         "projectId": "09000f92-3ed6-45b4-8442-dadcae834efc"

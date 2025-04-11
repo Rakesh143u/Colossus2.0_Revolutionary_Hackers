@@ -1,5 +1,3 @@
-// ContactsScreen.js
-
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -9,6 +7,7 @@ import {
   TextInput,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import * as Contacts from "expo-contacts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -19,18 +18,20 @@ const ContactsScreen = ({ navigation }) => {
   const [emergencyContacts, setEmergencyContacts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [processingIds, setProcessingIds] = useState(new Set());
 
-  // Check authentication status and fetch data on mount.
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const [tokenItem, userIdItem, tokenExpiryItem] =
-          await AsyncStorage.multiGet(["token", "userId", "tokenExpiry"]);
-        const token = tokenItem[1];
-        const tokenExpiry = tokenExpiryItem[1];
+        const [tokenItem, tokenExpiryItem] = await AsyncStorage.multiGet([
+          "token",
+          "tokenExpiry",
+        ]);
 
-        // If no token or token expired, clear storage and navigate to Login.
-        if (!token || !tokenExpiry || Date.now() > parseInt(tokenExpiry, 10)) {
+        if (
+          !tokenItem[1] ||
+          Date.now() > parseInt(tokenExpiryItem[1] || 0, 10)
+        ) {
           await AsyncStorage.multiRemove(["token", "userId", "tokenExpiry"]);
           navigation.replace("Login");
           return;
@@ -40,14 +41,14 @@ const ContactsScreen = ({ navigation }) => {
         fetchContacts();
         fetchEmergencyContacts();
       } catch (err) {
-        console.error("checkAuth error:", err);
+        console.error("Auth check error:", err);
+        navigation.replace("Login");
       }
     };
 
     checkAuth();
   }, [navigation]);
 
-  // Fetch device contacts.
   const fetchContacts = async () => {
     try {
       const { status } = await Contacts.requestPermissionsAsync();
@@ -58,55 +59,97 @@ const ContactsScreen = ({ navigation }) => {
         setContacts(data.filter((c) => c.phoneNumbers?.length > 0));
       }
     } catch (err) {
-      console.error("fetchContacts error:", err);
+      Alert.alert("Error", "Failed to fetch contacts");
+      console.error("Contacts fetch error:", err);
     }
   };
 
-  // Fetch emergency contacts from the backend.
   const fetchEmergencyContacts = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
+
       const response = await fetch(
         "http://192.168.163.124:3000/api/emergency",
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Server error: ${text}`);
+      }
+
       const result = await response.json();
       setEmergencyContacts(result);
     } catch (error) {
-      console.error("Fetch error:", error);
+      Alert.alert("Error", error.message || "Connection error");
+      console.error("Emergency fetch error:", error);
     }
   };
 
-  // Toggle emergency contact (backend toggles via POST).
   const toggleEmergencyContact = async (contact) => {
     try {
+      setProcessingIds((prev) => new Set([...prev, contact.id]));
+
+      const phoneNumber = contact.phoneNumbers[0]?.number;
+      if (!phoneNumber) {
+        throw new Error("Contact must have a valid phone number");
+      }
+
       const token = await AsyncStorage.getItem("token");
-      if (!token) return;
-      await fetch("http://192.168.163.124:3000/api/emergency", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          contact_id: contact.id,
-          contact_name: contact.name,
-          contact_number: contact.phoneNumbers[0]?.number,
-        }),
-      });
-      fetchEmergencyContacts(); // Refresh the list
+      if (!token) throw new Error("Authentication required");
+
+      const response = await fetch(
+        "http://192.168.163.124:3000/api/emergency",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            contact_id: contact.id.toString(),
+            contact_name: contact.name,
+            contact_number: phoneNumber,
+          }),
+        }
+      );
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error(`Invalid response: ${text}`);
+      }
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Operation failed");
+
+      await fetchEmergencyContacts();
     } catch (error) {
       console.error("Toggle error:", error);
+
+      if (error.message.includes("User not found")) {
+        await AsyncStorage.multiRemove(["token", "userId", "tokenExpiry"]);
+        Alert.alert("Session Expired", "Please login again");
+        navigation.replace("Login");
+        return;
+      }
+
+      Alert.alert("Error", error.message || "Failed to save contact");
+    } finally {
+      setProcessingIds((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(contact.id);
+        return newSet;
+      });
     }
   };
 
-  const handleLogout = async () => {
-    await AsyncStorage.multiRemove(["token", "userId", "tokenExpiry"]);
-    navigation.replace("Login");
-  };
+  const filteredContacts = contacts.filter((c) =>
+    c.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   if (loading) {
     return (
@@ -116,14 +159,8 @@ const ContactsScreen = ({ navigation }) => {
     );
   }
 
-  // Filter contacts based on search query.
-  const filteredContacts = contacts.filter((c) =>
-    c.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   return (
     <View style={styles.container}>
-      {/* Header with Back Button */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -134,7 +171,6 @@ const ContactsScreen = ({ navigation }) => {
         <Text style={styles.headerTitle}>Emergency Contacts</Text>
       </View>
 
-      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Icon name="search" size={20} color="#bbb" style={styles.searchIcon} />
         <TextInput
@@ -146,7 +182,6 @@ const ContactsScreen = ({ navigation }) => {
         />
       </View>
 
-      {/* Display Marked Emergency Contacts */}
       {emergencyContacts.length > 0 && (
         <View style={styles.emergencyListContainer}>
           <Text style={styles.emergencyListTitle}>
@@ -168,7 +203,6 @@ const ContactsScreen = ({ navigation }) => {
         </View>
       )}
 
-      {/* Contacts List */}
       <FlatList
         data={filteredContacts}
         keyExtractor={(item) => item.id.toString()}
@@ -176,29 +210,42 @@ const ContactsScreen = ({ navigation }) => {
           const isEmergency = emergencyContacts.some(
             (ec) => ec.contact_id === item.id
           );
+          const isProcessing = processingIds.has(item.id);
+
           return (
             <View style={styles.contactItem}>
               <View style={styles.contactInfo}>
                 <Text style={styles.contactName}>{item.name}</Text>
-                {item.phoneNumbers && item.phoneNumbers[0] && (
+                {item.phoneNumbers?.[0]?.number && (
                   <Text style={styles.contactPhone}>
                     {item.phoneNumbers[0].number}
                   </Text>
                 )}
               </View>
               <TouchableOpacity
-                style={[styles.button, isEmergency && styles.emergencyButton]}
+                style={[
+                  styles.button,
+                  isEmergency && styles.emergencyButton,
+                  isProcessing && styles.processingButton,
+                ]}
                 onPress={() => toggleEmergencyContact(item)}
+                disabled={isProcessing}
               >
-                <Icon
-                  name={isEmergency ? "check-circle" : "exclamation-circle"}
-                  size={16}
-                  color="#fff"
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={styles.buttonText}>
-                  {isEmergency ? "Marked" : "Mark as Emergency"}
-                </Text>
+                {isProcessing ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Icon
+                      name={isEmergency ? "check-circle" : "exclamation-circle"}
+                      size={16}
+                      color="#fff"
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text style={styles.buttonText}>
+                      {isEmergency ? "Marked" : "Mark Emergency"}
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           );
@@ -207,10 +254,9 @@ const ContactsScreen = ({ navigation }) => {
         contentContainerStyle={styles.listContent}
       />
 
-      {/* Return Back to Home Button */}
       <TouchableOpacity
         style={styles.homeButton}
-        onPress={() => navigation.navigate("Home")}
+        onPress={() => navigation.navigate("MainHome")}
       >
         <Icon name="home" size={24} color="#fff" />
         <Text style={styles.homeButtonText}>Return Home</Text>
@@ -218,7 +264,6 @@ const ContactsScreen = ({ navigation }) => {
     </View>
   );
 };
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -313,6 +358,9 @@ const styles = StyleSheet.create({
   },
   emergencyButton: {
     backgroundColor: "#FF6F61",
+  },
+  processingButton: {
+    backgroundColor: "#999",
   },
   buttonText: {
     color: "#fff",

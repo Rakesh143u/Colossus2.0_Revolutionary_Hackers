@@ -1,20 +1,13 @@
 // EmergencyScreen.js
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Alert,
-  PermissionsAndroid,
-  Platform,
-} from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, Alert } from "react-native";
 import { BleManager } from "react-native-ble-plx";
 import { decode as atob } from "base-64";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Update these constants to match your ESP32 advertisement and service/characteristic UUIDs.
-const DEVICE_NAME = "ESP32_ButtonSender";
+const DEVICE_NAME = "ESP32 Button BLE";
 const SERVICE_UUID = "12345678-1234-1234-1234-1234567890ab";
 const CHARACTERISTIC_UUID = "abcd1234-5678-90ab-cdef-1234567890ab";
 
@@ -23,55 +16,28 @@ const EmergencyScreen = () => {
   const [connectedDevice, setConnectedDevice] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
 
-  // Function to request BLE permissions for Android
-  const requestBluetoothPermissions = async () => {
-    if (Platform.OS === "android") {
-      try {
-        const granted = await PermissionsAndroid.requestMultiple([
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        ]);
-        const allGranted = Object.values(granted).every(
-          (status) => status === PermissionsAndroid.RESULTS.GRANTED
-        );
-        if (!allGranted) {
-          Alert.alert(
-            "Permissions Denied",
-            "Bluetooth and location permissions are required to scan for devices."
-          );
-          return false;
-        }
-      } catch (err) {
-        console.error("Error requesting Bluetooth permissions: ", err);
-        return false;
-      }
-    }
-    return true;
-  };
+  // useRef variables for counting presses and handling debounce timer
+  const pressCountRef = useRef(0);
+  const timerRef = useRef(null);
 
   useEffect(() => {
-    const initialize = async () => {
-      const permissionsGranted = await requestBluetoothPermissions();
-      if (!permissionsGranted) return; // Stop further execution if permissions are not granted
-
-      // Monitor Bluetooth state.
-      const subscription = manager.onStateChange((state) => {
-        console.log("Bluetooth state changed:", state);
-        if (state === "PoweredOn") {
-          console.log("Bluetooth is powered on.");
-          startScanning();
-          subscription.remove();
-        }
-      }, true);
-    };
-
-    initialize();
+    // Monitor Bluetooth state.
+    const subscription = manager.onStateChange((state) => {
+      console.log("Bluetooth state changed:", state);
+      if (state === "PoweredOn") {
+        console.log("Bluetooth is powered on.");
+        startScanning();
+        subscription.remove();
+      }
+    }, true);
 
     // Clean up on component unmount.
     return () => {
       console.log("Cleaning up BLE Manager...");
       manager.destroy();
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
     };
   }, [manager]);
 
@@ -140,13 +106,33 @@ const EmergencyScreen = () => {
         console.log("Characteristic update received:", receivedValue);
 
         if (receivedValue.trim() === "Button Pressed!") {
-          console.log("Detected button press signal from ESP32!");
-          triggerEmergency();
+          // Increment button press count.
+          pressCountRef.current += 1;
+          // Clear any existing debounce timer.
+          if (timerRef.current) {
+            clearTimeout(timerRef.current);
+          }
+          // Set a debounce timer (500ms). After the timeout, evaluate the number of presses.
+          timerRef.current = setTimeout(() => {
+            if (pressCountRef.current === 2) {
+              console.log("Detected button pressed twice");
+            } else if (pressCountRef.current === 3) {
+              console.log("Detected button pressed thrice");
+            } else {
+              console.log(
+                `Detected button pressed ${pressCountRef.current} time(s)`
+              );
+            }
+            // Reset the count and timer.
+            pressCountRef.current = 0;
+            timerRef.current = null;
+          }, 500);
         }
       }
     );
   };
 
+  // The triggerEmergency function is left intact in case you want to call it from elsewhere.
   const triggerEmergency = async () => {
     try {
       // Request location permission.
@@ -178,7 +164,7 @@ const EmergencyScreen = () => {
 
       // Send the POST request to your backend API.
       const response = await fetch(
-        "http://172.16.7.155:3000/api/sendEmergency",
+        "http://192.168.163.124:3000/api/sendEmergency",
         {
           method: "POST",
           headers: {

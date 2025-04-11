@@ -34,7 +34,7 @@ const SignUpScreen = ({ navigation }) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name,
-            email: createEmail,
+            emaizl: createEmail,
             password: createPassword,
           }),
         }
