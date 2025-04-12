@@ -1,60 +1,49 @@
-// EmergencyScreen.js
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Alert } from "react-native";
+import { View, Text, StyleSheet, Alert, TouchableOpacity } from "react-native";
 import { BleManager } from "react-native-ble-plx";
 import { decode as atob } from "base-64";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Icon from "react-native-vector-icons/FontAwesome";
 
-// Update these constants to match your ESP32 advertisement and service/characteristic UUIDs.
 const DEVICE_NAME = "ESP32 Button BLE";
 const SERVICE_UUID = "12345678-1234-1234-1234-1234567890ab";
 const CHARACTERISTIC_UUID = "abcd1234-5678-90ab-cdef-1234567890ab";
 
-const EmergencyScreen = () => {
+const EmergencyScreen = ({ navigation }) => {
   const [manager] = useState(new BleManager());
   const [connectedDevice, setConnectedDevice] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [pressCount, setPressCount] = useState(0);
+  const [pressStatus, setPressStatus] = useState("");
 
-  // useRef variables for counting presses and handling debounce timer
   const pressCountRef = useRef(0);
   const timerRef = useRef(null);
+  const mountedRef = useRef(false);
 
   useEffect(() => {
-    // Monitor Bluetooth state.
+    mountedRef.current = true;
+
     const subscription = manager.onStateChange((state) => {
       console.log("Bluetooth state changed:", state);
       if (state === "PoweredOn") {
-        console.log("Bluetooth is powered on.");
         startScanning();
         subscription.remove();
       }
     }, true);
 
-    // Clean up on component unmount.
     return () => {
-      console.log("Cleaning up BLE Manager...");
+      mountedRef.current = false;
       manager.destroy();
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [manager]);
 
   const startScanning = () => {
     setIsScanning(true);
-    console.log("Starting BLE scan for devices...");
     manager.startDeviceScan(null, null, (error, device) => {
-      if (error) {
-        console.error("Error during scan:", error);
-        return;
-      }
-      if (device) {
-        const deviceName = device.name ? device.name : "Unnamed";
-        console.log(`Found device: ${deviceName}`);
-      }
-      if (device && device.name === DEVICE_NAME) {
-        console.log(`Target device "${DEVICE_NAME}" found.`);
+      if (error) return;
+      if (device?.name === DEVICE_NAME) {
         manager.stopDeviceScan();
         setIsScanning(false);
         connectToDevice(device);
@@ -63,40 +52,26 @@ const EmergencyScreen = () => {
   };
 
   const connectToDevice = async (device) => {
-    console.log("Attempting to connect to device:", device.name);
     try {
       const connected = await device.connect();
-      console.log("Connected to device:", connected.name);
       setConnectedDevice(connected);
-
-      // Discover services and characteristics.
-      console.log("Discovering services and characteristics...");
       await connected.discoverAllServicesAndCharacteristics();
-      console.log("Services and characteristics discovered.");
       setupCharacteristicMonitoring(connected);
     } catch (error) {
-      console.error("Error connecting to device:", error);
-      Alert.alert(
-        "Connection Error",
-        "Failed to connect to the ESP32. Retrying scan..."
-      );
-      setTimeout(() => startScanning(), 3000);
+      Alert.alert("Connection Error", "Retrying connection...");
+      setTimeout(startScanning, 3000);
     }
   };
 
   const setupCharacteristicMonitoring = (device) => {
-    console.log("Setting up characteristic monitoring...");
     device.monitorCharacteristicForService(
       SERVICE_UUID,
       CHARACTERISTIC_UUID,
       (error, characteristic) => {
         if (error) {
-          console.error("Error during characteristic monitoring:", error);
-          // If the device disconnects, reset and rescan.
-          if (error.message && error.message.includes("disconnected")) {
-            console.log("Device disconnected. Restarting scan...");
+          if (error.message.includes("disconnected")) {
             setConnectedDevice(null);
-            setTimeout(() => startScanning(), 3000);
+            setTimeout(startScanning, 3000);
           }
           return;
         }
@@ -105,64 +80,60 @@ const EmergencyScreen = () => {
           : "";
         console.log("Characteristic update received:", receivedValue);
 
-        if (receivedValue.trim() === "Button Pressed!") {
-          // Increment button press count.
-          pressCountRef.current += 1;
-          // Clear any existing debounce timer.
-          if (timerRef.current) {
-            clearTimeout(timerRef.current);
+        if (receivedValue.includes("pressed")) {
+          const pressMatch = receivedValue.match(/(twice|thrice|\d+ times?)/i);
+          const pressText = pressMatch ? pressMatch[0] : "once";
+
+          const countMap = {
+            once: 1,
+            twice: 2,
+            thrice: 3,
+          };
+
+          const count =
+            pressText in countMap
+              ? countMap[pressText]
+              : parseInt(pressText) || 1;
+
+          pressCountRef.current = count;
+          setPressCount(count);
+
+          let status = `${count} Press${count > 1 ? "es" : ""} Detected`;
+          if (count === 2) {
+            status = "Double Press - Emergency Triggered!";
+            // Uncomment triggerEmergency if you want to send an alert:
+            // triggerEmergency();
+            // Navigate to a Chat or AutoChat screen as needed:
+            navigation.navigate("AutoChatScreen");
+          } else if (count === 3) {
+            status = "Triple Press Detected! Navigating to Safe Places...";
+            navigation.navigate("LocationScreen");
           }
-          // Set a debounce timer (500ms). After the timeout, evaluate the number of presses.
-          timerRef.current = setTimeout(() => {
-            if (pressCountRef.current === 2) {
-              console.log("Detected button pressed twice");
-            } else if (pressCountRef.current === 3) {
-              console.log("Detected button pressed thrice");
-            } else {
-              console.log(
-                `Detected button pressed ${pressCountRef.current} time(s)`
-              );
-            }
-            // Reset the count and timer.
+
+          setPressStatus(status);
+
+          setTimeout(() => {
+            if (!mountedRef.current) return;
             pressCountRef.current = 0;
-            timerRef.current = null;
-          }, 500);
+            setPressCount(0);
+            setPressStatus("");
+          }, 2000);
         }
       }
     );
   };
 
-  // The triggerEmergency function is left intact in case you want to call it from elsewhere.
   const triggerEmergency = async () => {
     try {
-      // Request location permission.
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Permission Denied",
-          "Location access is required to send your position."
-        );
-        return;
-      }
-      // Get the current location.
+      if (status !== "granted") throw new Error("Location permission denied");
+
       const location = await Location.getCurrentPositionAsync({});
       const { latitude, longitude } = location.coords;
-      console.log(`Location obtained: ${latitude}, ${longitude}`);
 
-      // Get the JWT token from AsyncStorage.
       const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert(
-          "Authentication Error",
-          "User is not logged in. Cannot send emergency alert."
-        );
-        return;
-      }
+      if (!token) throw new Error("Authentication required");
 
-      // Compose the emergency message; you can customize this as needed.
-      const emergencyMessage = `Emergency! Please help. Current location: https://maps.google.com/?q=${latitude},${longitude}`;
-
-      // Send the POST request to your backend API.
       const response = await fetch(
         "http://192.168.163.124:3000/api/sendEmergency",
         {
@@ -174,44 +145,43 @@ const EmergencyScreen = () => {
           body: JSON.stringify({
             latitude,
             longitude,
-            message: emergencyMessage,
+            message: `Emergency! Location: https://maps.google.com/?q=${latitude},${longitude}`,
           }),
         }
       );
-      const data = await response.json();
-      if (response.ok) {
-        console.log("Emergency SMS sent successfully:", data.message);
-        Alert.alert(
-          "Emergency Alert",
-          "Emergency SMS sent successfully to all contacts."
-        );
-      } else {
-        console.error("Error sending emergency SMS:", data.error);
-        Alert.alert("Error", data.error || "Failed to send emergency SMS.");
-      }
+
+      if (!response.ok) throw new Error("Failed to send alert");
     } catch (error) {
-      console.error("Error in triggerEmergency:", error);
-      Alert.alert(
-        "Error",
-        "An error occurred while sending the emergency alert."
-      );
+      Alert.alert("Error", error.message);
     }
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Emergency Screen</Text>
-      {connectedDevice ? (
-        <Text style={styles.statusText}>
-          Connected to: {connectedDevice.name}
-        </Text>
-      ) : (
-        <Text style={styles.statusText}>
-          {isScanning
-            ? "Scanning for ESP32 device..."
-            : "Not connected. Retrying scan..."}
-        </Text>
-      )}
+      <Text style={styles.title}>Emergency System</Text>
+      <View style={styles.statusContainer}>
+        {connectedDevice ? (
+          <Text style={styles.connectedText}>
+            Connected: {connectedDevice.name}
+          </Text>
+        ) : (
+          <Text style={styles.scanningText}>
+            {isScanning ? "Scanning..." : "Connecting..."}
+          </Text>
+        )}
+        <View style={styles.pressContainer}>
+          <Text style={styles.pressCount}>Button Presses: {pressCount}</Text>
+          {pressStatus && <Text style={styles.pressStatus}>{pressStatus}</Text>}
+        </View>
+      </View>
+
+      {/* Home Icon Button (Bottom Middle) */}
+      <TouchableOpacity
+        style={styles.homeButton}
+        onPress={() => navigation.navigate("Home")}
+      >
+        <Icon name="home" size={30} color="#ffffff" />
+      </TouchableOpacity>
     </View>
   );
 };
@@ -221,17 +191,55 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#f5f5f5",
     padding: 20,
-    backgroundColor: "#fff",
   },
   title: {
     fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 30,
+    color: "#2c3e50",
+  },
+  statusContainer: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  connectedText: {
+    fontSize: 18,
+    color: "#27ae60",
     marginBottom: 20,
+  },
+  scanningText: {
+    fontSize: 16,
+    color: "#e67e22",
+  },
+  pressContainer: {
+    marginTop: 30,
+    alignItems: "center",
+  },
+  pressCount: {
+    fontSize: 18,
+    color: "#2c3e50",
+    fontWeight: "600",
+  },
+  pressStatus: {
+    fontSize: 16,
+    color: "#e74c3c",
+    marginTop: 10,
     fontWeight: "bold",
   },
-  statusText: {
-    fontSize: 16,
-    marginTop: 10,
+  homeButton: {
+    position: "absolute",
+    bottom: 30,
+    alignSelf: "center",
+    backgroundColor: "#6A00FF",
+    padding: 15,
+    borderRadius: 50,
+    elevation: 5, // for Android shadow
+    shadowColor: "#000", // for iOS shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
   },
 });
 

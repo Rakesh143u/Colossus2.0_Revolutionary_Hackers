@@ -92,7 +92,7 @@ const ChatbotScreen = () => {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
-      <Text style={styles.title}>Gemini AI Chatbot</Text>
+      <Text style={styles.title}>AI Chatbot</Text>
       <FlatList
         data={chatHistory}
         keyExtractor={(item) => item.id}

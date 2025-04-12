@@ -256,7 +256,7 @@ const ContactsScreen = ({ navigation }) => {
 
       <TouchableOpacity
         style={styles.homeButton}
-        onPress={() => navigation.navigate("MainHome")}
+        onPress={() => navigation.navigate("Home")}
       >
         <Icon name="home" size={24} color="#fff" />
         <Text style={styles.homeButtonText}>Return Home</Text>

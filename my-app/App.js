@@ -2,6 +2,8 @@
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+
+// Import screens
 import LoginScreen from "./screens/login";
 import ContactsScreen from "./screens/contactsscreen";
 import SignInScreen from "./screens/signinscreen";
@@ -9,8 +11,10 @@ import Tabs from "./Tabs";
 import ProfileScreen from "./screens/profilescreen";
 import ChatListScreen from "./screens/ChatListScreen";
 import ChatScreen from "./screens/ChatScreen";
-import EmergencyAlert from "./screens/EmergencyAlert"; // Updated import
 import ChatbotScreen from "./screens/ChatbotScreen";
+import EmergencyAlert from "./screens/EmergencyAlert"; // Ensure this points to your emergency alert screen
+import LocationScreen from "./screens/LocationScreen";
+import AutoChatScreen from "./screens/AutoChatScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -29,9 +33,9 @@ export default function App() {
         <Stack.Screen name="ChatList" component={ChatListScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="ChatbotScreen" component={ChatbotScreen} />
-
-        {/* Registered the EmergencyAlert screen */}
         <Stack.Screen name="EmergencyAlert" component={EmergencyAlert} />
+        <Stack.Screen name="LocationScreen" component={LocationScreen} />
+        <Stack.Screen name="AutoChatScreen" component={AutoChatScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

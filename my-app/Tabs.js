@@ -6,6 +6,8 @@ import ContactsScreen from "./screens/contactsscreen";
 import LocationScreen from "./screens/LocationScreen";
 import SettingsScreen from "./screens/SettingsScreen";
 import ChatbotScreen from "./screens/ChatbotScreen"; // New Chatbot screen component
+
+
 import Icon from "react-native-vector-icons/FontAwesome";
 
 // 1. Dummy "Alert" component that instantly redirects to EmergencyAlert
@@ -88,6 +90,7 @@ export default function Tabs() {
           ),
         }}
       />
+      
     </Tab.Navigator>
   );
 }

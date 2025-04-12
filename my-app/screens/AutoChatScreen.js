@@ -1,34 +1,29 @@
-// screens/ChatScreen.js
-import React, { useState, useRef } from "react";
-import { 
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView, 
-  TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, 
-  ScrollView, Alert, Linking 
+// screens/AutoChatScreen.js
+import React, { useState, useRef, useEffect } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  ScrollView,
+  Alert,
+  Linking,
 } from "react-native";
 import Icon from "react-native-vector-icons/FontAwesome";
 import * as Location from "expo-location";
 
-const ChatScreen = ({ route, navigation }) => {
-  const { contact } = route.params; // Contact passed from ChatListScreen
+const AutoChatScreen = ({ route, navigation }) => {
+  // If you're passing a contact, you can still get it from route.params.
+  const { contact } = route.params || {};
   const [messages, setMessages] = useState([]);
   const [chatText, setChatText] = useState("");
   const [locationLoading, setLocationLoading] = useState(false);
   const scrollViewRef = useRef(null);
-
-  // Send a text message
-  const handleSendMessage = () => {
-    if (!chatText.trim()) return;
-
-    const newMessage = {
-      id: Date.now().toString(),
-      type: "text",
-      content: chatText,
-      timestamp: new Date().toLocaleTimeString(),
-    };
-
-    setMessages((prevMessages) => [...prevMessages, newMessage]);
-    setChatText("");
-  };
 
   // Request location permission
   const requestLocationPermission = async () => {
@@ -40,8 +35,8 @@ const ChatScreen = ({ route, navigation }) => {
     return true;
   };
 
-  // Share live location
-  const handleShareLiveLocation = async () => {
+  // Automatically share live location and add it as a message
+  const autoShareLiveLocation = async () => {
     const hasPermission = await requestLocationPermission();
     if (!hasPermission) return;
 
@@ -51,14 +46,14 @@ const ChatScreen = ({ route, navigation }) => {
       const { latitude, longitude } = currentLocation.coords;
       const liveLocationURL = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
 
-      const newMessage = {
-        id: Date.now().toString(),
+      const locationMessage = {
+        id: Date.now().toString() + "_loc",
         type: "location",
         content: liveLocationURL,
         timestamp: new Date().toLocaleTimeString(),
       };
 
-      setMessages((prevMessages) => [...prevMessages, newMessage]);
+      setMessages((prevMessages) => [...prevMessages, locationMessage]);
     } catch (error) {
       Alert.alert("Error", "Unable to fetch your current location.");
       console.error(error);
@@ -67,10 +62,10 @@ const ChatScreen = ({ route, navigation }) => {
     }
   };
 
-  // Send an alert message
-  const handleSendAlert = () => {
+  // Automatically send an alert message and add it as a message
+  const autoSendAlert = () => {
     const alertMessage = {
-      id: Date.now().toString(),
+      id: Date.now().toString() + "_alert",
       type: "alert",
       content: "ALERT: I am in danger. Please help me!",
       timestamp: new Date().toLocaleTimeString(),
@@ -79,23 +74,61 @@ const ChatScreen = ({ route, navigation }) => {
     setMessages((prevMessages) => [...prevMessages, alertMessage]);
   };
 
+  // Manual text message sending function
+  const handleSendMessage = () => {
+    if (!chatText.trim()) return;
+
+    const newMessage = {
+      id: Date.now().toString() + "_msg",
+      type: "text",
+      content: chatText,
+      timestamp: new Date().toLocaleTimeString(),
+    };
+
+    setMessages((prevMessages) => [...prevMessages, newMessage]);
+    setChatText("");
+  };
+
+  // Manual location sharing triggered by user
+  const handleShareLiveLocation = async () => {
+    await autoShareLiveLocation();
+  };
+
+  // Manual alert sending triggered by user
+  const handleSendAlert = () => {
+    autoSendAlert();
+  };
+
+  // Automatically share location and send alert when the component mounts
+  useEffect(() => {
+    async function autoTrigger() {
+      await autoShareLiveLocation();
+      autoSendAlert();
+    }
+    autoTrigger();
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-left" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{contact.name}</Text>
+        <Text style={styles.headerTitle}>
+          {contact ? contact.name : "Emergency Chat"}
+        </Text>
       </View>
-      
-      <KeyboardAvoidingView 
-        style={styles.container} 
+
+      <KeyboardAvoidingView
+        style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <ScrollView 
+        <ScrollView
           style={styles.messagesContainer}
           ref={scrollViewRef}
-          onContentSizeChange={() => scrollViewRef.current.scrollToEnd({ animated: true })}
+          onContentSizeChange={() =>
+            scrollViewRef.current.scrollToEnd({ animated: true })
+          }
         >
           {messages.map((msg) => (
             <View key={msg.id} style={styles.messageBubble}>
@@ -107,9 +140,13 @@ const ChatScreen = ({ route, navigation }) => {
                   : "Message"}
               </Text>
               {msg.type === "location" ? (
-                <Text 
+                <Text
                   style={[styles.messageText, { color: "#007BFF" }]}
-                  onPress={() => Linking.openURL(msg.content).catch((err) => console.error(err))}
+                  onPress={() =>
+                    Linking.openURL(msg.content).catch((err) =>
+                      console.error(err)
+                    )
+                  }
                 >
                   {msg.content}
                 </Text>
@@ -119,8 +156,12 @@ const ChatScreen = ({ route, navigation }) => {
               <Text style={styles.timestamp}>{msg.timestamp}</Text>
             </View>
           ))}
-          {locationLoading && <ActivityIndicator size="large" color="#6A00FF" />}
+          {locationLoading && (
+            <ActivityIndicator size="large" color="#6A00FF" />
+          )}
         </ScrollView>
+
+        {/* Manual text chat input */}
         <View style={styles.inputRow}>
           <TextInput
             style={styles.chatInput}
@@ -130,15 +171,26 @@ const ChatScreen = ({ route, navigation }) => {
             onChangeText={setChatText}
             multiline
           />
-          <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={handleSendMessage}
+          >
             <Text style={styles.sendButtonText}>Send</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Additional manual actions: share location and send alert */}
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleShareLiveLocation}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleShareLiveLocation}
+          >
             <Text style={styles.actionButtonText}>Share Location</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={handleSendAlert}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleSendAlert}
+          >
             <Text style={styles.actionButtonText}>Send Alert</Text>
           </TouchableOpacity>
         </View>
@@ -181,7 +233,10 @@ const styles = StyleSheet.create({
     color: "#555",
     marginBottom: 3,
   },
-  messageText: { fontSize: 16, color: "#333" },
+  messageText: {
+    fontSize: 16,
+    color: "#333",
+  },
   timestamp: {
     fontSize: 10,
     color: "#999",
@@ -237,4 +292,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ChatScreen;
+export default AutoChatScreen;

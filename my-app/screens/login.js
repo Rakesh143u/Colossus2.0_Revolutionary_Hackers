@@ -44,7 +44,7 @@ const LoginScreen = ({ navigation }) => {
           ["userId", data.user.id.toString()],
           ["tokenExpiry", (Date.now() + 3600000).toString()],
         ]);
-        navigation.navigate("Home");
+        navigation.navigate("EmergencyAlert");
       } else {
         Alert.alert("Error", data.error || "Login failed");
       }
