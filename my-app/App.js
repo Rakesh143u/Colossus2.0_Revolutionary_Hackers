@@ -15,6 +15,7 @@ import ChatbotScreen from "./screens/ChatbotScreen";
 import EmergencyAlert from "./screens/EmergencyAlert"; // Ensure this points to your emergency alert screen
 import LocationScreen from "./screens/LocationScreen";
 import AutoChatScreen from "./screens/AutoChatScreen";
+import LocationScreen1 from "./screens/LocationScreen1";
 
 const Stack = createNativeStackNavigator();
 
@@ -36,6 +37,7 @@ export default function App() {
         <Stack.Screen name="EmergencyAlert" component={EmergencyAlert} />
         <Stack.Screen name="LocationScreen" component={LocationScreen} />
         <Stack.Screen name="AutoChatScreen" component={AutoChatScreen} />
+        <Stack.Screen name="LocationScreen1" component={LocationScreen1}/>
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -105,9 +105,10 @@ const EmergencyScreen = ({ navigation }) => {
             // triggerEmergency();
             // Navigate to a Chat or AutoChat screen as needed:
             navigation.navigate("AutoChatScreen");
+            
           } else if (count === 3) {
             status = "Triple Press Detected! Navigating to Safe Places...";
-            navigation.navigate("LocationScreen");
+            navigation.navigate("LocationScreen1");
           }
 
           setPressStatus(status);
